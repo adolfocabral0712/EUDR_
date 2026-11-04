@@ -85,8 +85,9 @@ const FUENTES = {
 const COLUMNAS_EXCLUIR = {
   recibo: new Set([
     "HoraRto", "HoraSalida", "Observaciones", "FechaRtoOrigen", "CodigoGIS",
-    "Distancia", "Column36", "Column37", "Column38", "Column39", "Column40",
-    "Column41", "Column42"
+    "Distancia", "PilaOrigen", "Cosecha", "Sacada", "Carga", "Fardos",
+    "BrutoOrigenTon", "Densidad", "QUINCENA", "Column36", "Column37",
+    "Column38", "Column39", "Column40", "Column41", "Column42"
   ]),
   produccion: new Set([
     "Hours", "Turnos", "Hs Sin Madera", "BDMT per hour", "Scale figures",
@@ -344,13 +345,13 @@ async function loadSource(key, force=false) {
         rows = rowsFromSheet(ws, key === "produccion" ? 6 : 0);
         if (key === "recibo") rows = runReciboQuery(rows);
         if (key === "produccion") rows = runProduccionQuery(rows);
-        tableMeta.textContent = `${f.hoja} · vista de hasta 100 filas`;
+        tableMeta.textContent = `${f.hoja} · vista completa`;
       } else if (f.tipo === "csv") {
         const text = new TextDecoder("utf-8").decode(bytes); rows = runPadronesQuery(text);
-        tableMeta.textContent = "Base_Lavardin.csv · consulta Power Query simulada · vista de hasta 100 filas";
+        tableMeta.textContent = "Base_Lavardin.csv · consulta Power Query simulada · vista completa";
       } else {
         const text = new TextDecoder("utf-8").decode(bytes); const json = JSON.parse(text); rows = key === "origenes" ? runOrigenesQuery(json) : normalizeJsonRows(json);
-        tableMeta.textContent = "JSON recibido · estructura sin transformar · vista de hasta 100 filas";
+        tableMeta.textContent = "JSON recibido · estructura sin transformar · vista completa";
       }
     }
     estados[key] = {rows}; renderSourceList(); tableMeta.textContent = f.detalle; renderTable(rows, key); setGlobal(`${f.nombre}: ${rows.length.toLocaleString("es-UY")} filas cargadas.`,"ok");
@@ -441,9 +442,9 @@ function renderTable(rows, sourceKey) {
   const table = document.createElement("table"), thead = document.createElement("thead"), trh = document.createElement("tr");
   cols.forEach(c => { const th=document.createElement("th"); th.textContent=c; th.title=c; trh.append(th); }); thead.append(trh); table.append(thead);
   const tbody=document.createElement("tbody");
-  rows.slice(0,100).forEach(row => { const tr=document.createElement("tr"); cols.forEach(c => { const td=document.createElement("td"); const v=row?.[c]; td.textContent=formatearCelda(v,c); td.title=td.textContent; tr.append(td); }); tbody.append(tr); });
+  rows.forEach(row => { const tr=document.createElement("tr"); cols.forEach(c => { const td=document.createElement("td"); const v=row?.[c]; td.textContent=formatearCelda(v,c); td.title=td.textContent; tr.append(td); }); tbody.append(tr); });
   table.append(tbody); wrap.append(table); tableContainer.className=""; tableContainer.replaceChildren(wrap);
-  tableMeta.textContent += ` · mostrando ${Math.min(rows.length,100).toLocaleString("es-UY")} de ${rows.length.toLocaleString("es-UY")}`;
+  tableMeta.textContent += ` · ${rows.length.toLocaleString("es-UY")} filas totales`;
 }
 renderSourceList();
 loadButton.addEventListener("click",()=>loadSource(select.value));
