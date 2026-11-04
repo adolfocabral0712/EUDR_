@@ -109,6 +109,10 @@ const COLUMNAS_EXCLUIR = {
   ])
 };
 
+const TABLAS_CENTRADAS = new Set([
+  "porcentaje", "padrones", "origenes", "pilas", "recibo", "produccion"
+]);
+
 const select = document.getElementById("sourceSelect");
 const cards = document.getElementById("sourceCards");
 const loadButton = document.getElementById("loadButton");
@@ -182,7 +186,7 @@ function excelDateToIso(value) {
 }
 function toNumber(v) { if (typeof v === "number") return v; if (v == null || v === "") return null; const n = Number(String(v).replace(",",".")); return Number.isFinite(n) ? n : null; }
 function runReciboQuery(rows) {
-  return rows.filter(r => String(r["Depósito"] ?? "") === "FRIMOSA" && ["entrada","Entrada a granel"].includes(String(r["Tipo Remito"] ?? "")) && !String(r["NombreProd2"] ?? "").includes("Troz") && Number(r["AÑO"]) >= 2024);
+  return rows.filter(r => String(r["Depósito"] ?? "") === "FRIMOSA" && ["entrada","Entrada a granel"].includes(String(r["Tipo Remito"] ?? "")) && !String(r["NombreProd2"] ?? "").includes("Troz") && Number(r["AÑO"]) >= 2024 && (excelDateToIso(r["FechaRto"]) ?? "") > "2025-12-31");
 }
 function runProduccionQuery(rows) {
   const cutoff = new Date(); cutoff.setHours(0,0,0,0); cutoff.setDate(cutoff.getDate()-180);
@@ -444,7 +448,7 @@ function renderTable(rows, sourceKey) {
     .filter(col => !excluidas.has(normalizarColumna(col)));
   const wrap = document.createElement("div"); wrap.className="table-wrap";
   const table = document.createElement("table"), thead = document.createElement("thead"), trh = document.createElement("tr");
-  if (sourceKey === "produccion") table.classList.add("centered");
+  if (TABLAS_CENTRADAS.has(sourceKey)) table.classList.add("centered");
   cols.forEach(c => { const th=document.createElement("th"); th.textContent=c; th.title=c; trh.append(th); }); thead.append(trh); table.append(thead);
   const tbody=document.createElement("tbody");
   rows.forEach(row => { const tr=document.createElement("tr"); cols.forEach(c => { const td=document.createElement("td"); const v=row?.[c]; td.textContent=formatearCelda(v,c); td.title=td.textContent; tr.append(td); }); tbody.append(tr); });
