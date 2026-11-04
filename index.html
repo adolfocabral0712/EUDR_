@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Declaración EUDR | FAS</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root{--navy:#17324d;--blue:#21618c;--cyan:#dff2f2;--gold:#f2c230;--ink:#263442;--muted:#687684;--line:#d9e1e8;--bg:#f3f6f8;--white:#fff;--green:#247a4b;--red:#a33d36}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",Arial,sans-serif}
+    header{background:linear-gradient(115deg,var(--navy),var(--blue));color:white;padding:24px clamp(16px,4vw,48px)}
+    header h1{margin:0;font-size:clamp(22px,3vw,32px);letter-spacing:.2px}header p{margin:7px 0 0;color:#e3edf4}
+    main{max-width:1440px;margin:22px auto;padding:0 16px 36px}.toolbar,.panel,.source-card{background:var(--white);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 14px #16324d0a}
+    .toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap;padding:16px;margin-bottom:16px}.field{display:flex;flex-direction:column;gap:5px;min-width:220px}.field label{font-weight:650;color:var(--navy)}select,button{font:inherit;border-radius:8px;padding:10px 12px}select{border:1px solid #b9c7d2;background:white;color:var(--ink)}button{border:0;background:var(--gold);color:#24313c;font-weight:700;cursor:pointer}button:hover{filter:brightness(.96)}button:disabled{opacity:.65;cursor:wait}
+    .status{margin-left:auto;color:var(--muted);font-size:13px}.status.ok{color:var(--green)}.status.error{color:var(--red)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-bottom:16px}.source-card{padding:15px;display:flex;flex-direction:column;align-items:flex-start;min-height:150px}.source-card h2{margin:0 0 5px;font-size:16px;color:var(--navy)}.source-card p{margin:0 0 10px;color:var(--muted);font-size:12px;flex:1}.badge{display:inline-block;border-radius:20px;padding:4px 9px;font-size:11px;font-weight:700;background:#edf1f4;color:#53616d}.badge.ready{background:#e2f3e9;color:var(--green)}.badge.pending{background:#fff3d4;color:#775700}.badge.error{background:#fae6e3;color:var(--red)}.badge.loading{background:#e4effa;color:#21618c}.card-button{margin-top:10px;padding:7px 11px;font-size:12px}.card-button.secondary{background:#e9eef2;color:var(--navy)}
+    .panel{overflow:hidden}.panel-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.panel-head h2{font-size:17px;color:var(--navy);margin:0}.meta{color:var(--muted);font-size:12px}.table-wrap{overflow:auto;max-height:62vh}table{border-collapse:collapse;width:100%;min-width:760px;font-size:12px}th,td{padding:8px 10px;border-bottom:1px solid #e8edf1;text-align:left;white-space:nowrap;max-width:320px;overflow:hidden;text-overflow:ellipsis}th{position:sticky;top:0;background:#e9eef2;color:var(--navy);z-index:1}tbody tr:hover{background:#f7fafc}.empty{padding:28px;color:var(--muted);text-align:center}.note{margin-top:14px;background:#fff9e8;border:1px solid #f1dfaa;border-radius:10px;padding:12px 14px;color:#5b4b1c;font-size:13px}.footer{margin-top:12px;color:var(--muted);font-size:12px}
+    @media(max-width:650px){header{padding:18px 16px}.toolbar{align-items:stretch}.field{min-width:100%}.status{margin-left:0;width:100%}.panel-head{align-items:flex-start}}
+  </style>
+</head>
+<body>
+<header>
+  <h1>Declaración EUDR</h1>
+  <p>FAS · Exploración de fuentes y consultas Power Query</p>
+</header>
+<main>
+  <section class="toolbar" aria-label="Controles de consulta">
+    <div class="field"><label for="sourceSelect">Tabla a revisar</label><select id="sourceSelect"></select></div>
+    <button id="loadButton" type="button">Cargar seleccionada</button>
+    <button id="loadAllButton" type="button">Cargar todas</button>
+    <span id="globalStatus" class="status">Preparando carga de fuentes…</span>
+  </section>
+  <section id="sourceCards" class="grid" aria-label="Fuentes registradas"></section>
+  <section class="panel">
+    <div class="panel-head"><h2 id="tableTitle">Vista de datos</h2><span id="tableMeta" class="meta"></span></div>
+    <div id="tableContainer" class="empty">Las filas aparecerán aquí al cargar una fuente.</div>
+  </section>
+  <div class="note"><strong>Etapa actual:</strong> cargar y revisar cada tabla por separado. Los cruces y la generación de la declaración se incorporarán después de confirmar las fuentes y sus columnas.</div>
+  <div class="footer">Las consultas con una ruta local de Windows quedan pendientes hasta disponer de un enlace compartido accesible desde la web.</div>
+</main>
+<script>
+// Mantener estos enlaces estables: actualizar el contenido del archivo en Dropbox sin cambiar el enlace compartido.
+const FUENTES = {
+  recibo: {
+    nombre: "RECIBO",
+    tipo: "xlsb",
+    url: "https://dl.dropbox.com/scl/fi/2v6t2q2q5gl4es9za5b1n/RECIBO-2019-HOY.xlsb?rlkey=7yxhx0g4ekxdhq78yqjvd4gd0&dl=1",
+    hoja: "Hoja1",
+    detalle: "RECIBO-2019-HOY.xlsb · Hoja Hoja1 · filtros Power Query aplicados"
+  },
+  porcentaje: {
+    nombre: "PORCENTAJE DEPARTAMENTO",
+    tipo: "derivada",
+    detalle: "Se calcula desde FAS - PADRONES (Base_Lavardin__2): área y porcentaje por predio y región."
+  },
+  produccion: {
+    nombre: "PRODUCCIÓN BDMT",
+    tipo: "xlsb",
+    url: "https://dl.dropbox.com/scl/fi/tea9x25yuk16z3sq10r0b/STOCK-BDMT.xlsb?rlkey=acb4pg232u6e9vprw89gir8yc&dl=1",
+    hoja: "Producción",
+    detalle: "STOCK-BDMT.xlsb · Hoja Producción · últimos 180 días"
+  },
+  padrones: {
+    nombre: "FAS - PADRONES",
+    tipo: "csv",
+    url: "https://dl.dropbox.com/scl/fi/cj7qozof4pnbmnh514ihu/Base_Lavardin.csv?rlkey=g8cgi01p23u163v4ceidjft1i&dl=1",
+    detalle: "Base_Lavardin.csv · UTF-8 · agrupado por predio, catastro y especie"
+  },
+  origenes: {
+    nombre: "ORIGENES",
+    tipo: "json",
+    url: "https://dl.dropbox.com/scl/fi/lcvxvpa37thl53uqda5r5/origenes.json?rlkey=7kkrhmno4lfmjq86kl7hx8884&dl=1",
+    detalle: "origenes.json · estructura por confirmar"
+  },
+  pilas: {
+    nombre: "PILAS MONTES",
+    tipo: "json",
+    url: "https://dl.dropbox.com/scl/fi/wq1ar9eqt5k5x4qs516jd/MedicionesFAS.json?rlkey=m33ih0i8i9nip3uhqj9uz0a73&dl=1",
+    detalle: "MedicionesFAS.json · estructura y filtros de la tabla por confirmar"
+  }
+};
+
+// Columnas ocultas únicamente en la vista. Los datos originales permanecen cargados
+// por si alguna transformación posterior necesita alguno de estos campos.
+const COLUMNAS_EXCLUIR = {
+  pilas: new Set([
+    "id", "gis", "latitud", "longitud", "url_detalle", "url_ubicacion",
+    "valores_originales", "campos_fas", "potrero", "autor", "coordenadas", "version_app"
+  ]),
+  origenes: new Set([
+    "paga_flete", "seccion_judicial", "padron", "descripcion_del_acceso", "distancia",
+    "estado", "tipo_de_producto", "categoria_certificacion", "proveedor_fondo",
+    "codigo_proveedor", "manejo", "fondo", "activo", "fecha_modificacion",
+    "unnamed_11", "unnamed_12", "unnamed_13", "unnamed_14", "unnamed_15", "unnamed_16",
+    "num", "orighe", "tipo_de_origen", "codigo_gis", "email_del_origen",
+    "fas id", "fas id2", "fas id3", "fas_id", "fas_id2", "fas_id3"
+  ])
+};
+
+const select = document.getElementById("sourceSelect");
+const cards = document.getElementById("sourceCards");
+const loadButton = document.getElementById("loadButton");
+const loadAllButton = document.getElementById("loadAllButton");
+const globalStatus = document.getElementById("globalStatus");
+const tableTitle = document.getElementById("tableTitle");
+const tableMeta = document.getElementById("tableMeta");
+const tableContainer = document.getElementById("tableContainer");
+let estados = {};
+
+function statusText(sourceKey) {
+  const s = estados[sourceKey];
+  if (s?.loading) return {label:"Cargando…", cls:"loading"};
+  if (s?.error) return {label:"Error de carga", cls:"error"};
+  if (s?.rows) return {label:`Cargada · ${s.rows.length.toLocaleString("es-UY")} filas`, cls:"ready"};
+  if (FUENTES[sourceKey].tipo === "pendiente") return {label:"Fuente pendiente", cls:"pending"};
+  if (FUENTES[sourceKey].tipo === "derivada") return {label:"Se genera desde PADRONES", cls:"pending"};
+  return {label:"En espera", cls:""};
+}
+function renderSourceList() {
+  const selectedKey = select.value;
+  select.innerHTML = "";
+  cards.innerHTML = "";
+  Object.entries(FUENTES).forEach(([key, f]) => {
+    const option = document.createElement("option"); option.value = key; option.textContent = f.nombre; select.append(option);
+    const card = document.createElement("article"); card.className = "source-card";
+    const h = document.createElement("h2"); h.textContent = f.nombre;
+    const p = document.createElement("p"); p.textContent = f.detalle;
+    const b = document.createElement("span"); const st = statusText(key); b.className = `badge ${st.cls}`; b.textContent = st.label;
+    const action = document.createElement("button"); action.type = "button"; action.className = "card-button";
+    const state = estados[key];
+    action.textContent = f.tipo === "pendiente" ? "Pendiente" : state?.loading ? "Cargando…" : state?.error ? "Reintentar" : state?.rows ? "Ver tabla" : f.tipo === "derivada" ? "Generar" : "Cargar";
+    action.disabled = f.tipo === "pendiente" || !!state?.loading;
+    action.addEventListener("click", () => state?.rows ? showSource(key) : loadSource(key));
+    card.append(h,p,b,action); cards.append(card);
+  });
+  if (selectedKey && FUENTES[selectedKey]) select.value = selectedKey;
+}
+function setGlobal(message, cls="") { globalStatus.textContent = message; globalStatus.className = `status ${cls}`; }
+function normalizeUrl(url) {
+  const u = new URL(url); u.searchParams.set("dl","1"); return u.toString();
+}
+async function fetchBytes(url) {
+  const response = await fetch(normalizeUrl(url), {cache:"no-store"});
+  if (!response.ok) throw new Error(`Dropbox respondió HTTP ${response.status}.`);
+  return response.arrayBuffer();
+}
+function rowsFromSheet(ws, skipRows=0) {
+  // Conserva las filas vacías porque Power Query también las cuenta en Table.Skip.
+  const matrix = XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true,blankrows:true});
+  if (!matrix.length) return [];
+  const data = matrix.slice(skipRows);
+  if (!data.length) return [];
+  const headers = data[0].map((h,i) => String(h ?? `Column${i+1}`));
+  return data.slice(1).filter(row => row.some(v => v !== null && v !== "")).map(row => {
+    const obj = {}; headers.forEach((h,i) => { obj[h] = row[i] ?? null; }); return obj;
+  });
+}
+function excelDateToIso(value) {
+  if (value instanceof Date && !Number.isNaN(value.valueOf())) return value.toISOString().slice(0,10);
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const d = XLSX.SSF.parse_date_code(value); if (d) return `${d.y}-${String(d.m).padStart(2,"0")}-${String(d.d).padStart(2,"0")}`;
+  }
+  if (value == null || value === "") return null;
+  const s = String(value).trim();
+  let m = s.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/);
+  if (m) return `${m[3]}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`;
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return `${m[1]}-${String(m[2]).padStart(2,"0")}-${String(m[3]).padStart(2,"0")}`;
+  const d = new Date(s); return Number.isNaN(d.valueOf()) ? null : d.toISOString().slice(0,10);
+}
+function toNumber(v) { if (typeof v === "number") return v; if (v == null || v === "") return null; const n = Number(String(v).replace(",",".")); return Number.isFinite(n) ? n : null; }
+function runReciboQuery(rows) {
+  return rows.filter(r => String(r["Depósito"] ?? "") === "FRIMOSA" && ["entrada","Entrada a granel"].includes(String(r["Tipo Remito"] ?? "")) && !String(r["NombreProd2"] ?? "").includes("Troz") && Number(r["AÑO"]) >= 2024);
+}
+function runProduccionQuery(rows) {
+  const cutoff = new Date(); cutoff.setHours(0,0,0,0); cutoff.setDate(cutoff.getDate()-180);
+  const limit = cutoff.toISOString().slice(0,10);
+  return rows.map(r => ({...r, Fecha:excelDateToIso(r.Fecha)})).filter(r => Number(r.Year) >= 2024 && r[" BDMT"] != null && r.Type != null && r.Fecha && r.Fecha >= limit);
+}
+function normalizeJsonRows(data) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    for (const key of ["datos","data","registros","items","results"]) if (Array.isArray(data[key])) return data[key];
+    return [data];
+  }
+  return [];
+}
+function parseCsvNoQuotes(text) {
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(line => line.length > 0);
+  return lines.map(line => line.split(","));
+}
+function runPadronesQuery(text) {
+  const matrix = parseCsvNoQuotes(text);
+  if (!matrix.length) return [];
+  const headers = matrix[0];
+  const records = matrix.slice(1).map(values => {
+    const row = {}; headers.forEach((h,i) => row[h] = values[i] ?? null); return row;
+  });
+  const getArea = row => {
+    const raw = row["_areaha"];
+    if (raw == null || raw === "") return null;
+    const n = Number(String(raw).replace(/\./g, ",").replace(",", "."));
+    return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 10000) / 10000 : null;
+  };
+  const groups = new Map();
+  for (const sourceRow of records) {
+    const row = {...sourceRow,
+      _farmname:String(sourceRow["_farmname"] ?? "").replaceAll("DONA SARA SUR - PLANTESIA", "DOÑA SARA SUR - PLANTESIA"),
+      _farmgdb:String(sourceRow["_farmgdb"] ?? "").replaceAll("DONA SARA SUR - PLANTESIA", "DOÑA SARA SUR - PLANTESIA").replaceAll("MARMARAJA-DIANO", "MARMARAJÁ-DIANO")
+    };
+    const key = JSON.stringify([row["_farmgdb"], row["cadastid"], row["_specie"]]);
+    if (!groups.has(key)) groups.set(key, {first:row, sum:0, keyValues:[row["_farmgdb"],row["cadastid"],row["_specie"]]});
+    const area = getArea(row); if (area != null) groups.get(key).sum += area;
+  }
+  const out = [];
+  for (const group of groups.values()) {
+    const [farmgdb, cadastid, specie] = group.keyValues;
+    if (!(String(specie ?? "").includes("GLO") || String(specie ?? "").includes("SMI"))) continue;
+    const first = group.first;
+    let farmName = first["_farmname"] ?? "";
+    let farm = farmgdb ?? "";
+    farm = String(farm).replaceAll("DONA SARA SUR - PLANTESIA", "DOÑA SARA SUR - PLANTESIA").replaceAll("MARMARAJA-DIANO", "MARMARAJÁ-DIANO").toUpperCase();
+    farmName = String(farmName).replaceAll("DONA SARA SUR - PLANTESIA", "DOÑA SARA SUR - PLANTESIA").toUpperCase();
+    farm = farm.replaceAll("ANALIA RODRIGUEZ", "B3R ANALIA RODRIGUEZ").replaceAll("ELVIRA DEL QUEBRACHO", "QUEBRACHO - ALMEDO SAS");
+    farmName = farmName.replaceAll("ANALIA RODRIGUEZ", "B3R ANALIA RODRIGUEZ").replaceAll("ELVIRA DEL QUEBRACHO", "QUEBRACHO - ALMEDO SAS");
+    out.push({OBJECTID:first["PlotID"] ?? null,_farmname:farmName,_farmgdb:farm,_region:String(first["_region"] ?? "").toUpperCase(),cadastid,CadastUID:first["CadastUID"] ?? null,Suma_areaha:group.sum,Fondo:first["Fondo"] ?? null,_specie:specie ?? null});
+  }
+  out.sort((a,b) => String(a._farmgdb).localeCompare(String(b._farmgdb),"es"));
+  return out;
+}
+function runPorcentajeQuery(padrones) {
+  const areaPorPredioRegion = new Map();
+  for (const row of padrones) {
+    const farm = String(row._farmgdb ?? "");
+    const region = String(row._region ?? "");
+    const key = JSON.stringify([farm, region]);
+    const area = toNumber(row.Suma_areaha) ?? 0;
+    if (!areaPorPredioRegion.has(key)) areaPorPredioRegion.set(key, {farm, region, area:0});
+    areaPorPredioRegion.get(key).area += area;
+  }
+  const totalPorPredio = new Map();
+  for (const item of areaPorPredioRegion.values()) {
+    totalPorPredio.set(item.farm, (totalPorPredio.get(item.farm) ?? 0) + item.area);
+  }
+  return [...areaPorPredioRegion.values()].map(item => {
+    const total = totalPorPredio.get(item.farm) ?? 0;
+    const farmAntesDelUltimoReemplazo = item.farm.replaceAll("DONA SARA SUR - PLANTESIA", "DOÑA SARA SUR - PLANTESIA");
+    const personalizado = (farmAntesDelUltimoReemplazo.trim() + item.region.trim()).replace(/'/g, "");
+    return {
+      _farmgdb: item.farm.replaceAll("ANALIA RODRIGUEZ", "B3R ANALIA RODRIGUEZ"),
+      Total_Farmgdb: Math.round((total + Number.EPSILON) * 100) / 100,
+      _region: item.region,
+      Total_Area: Math.round((item.area + Number.EPSILON) * 100) / 100,
+      Porcentaje: total === 0 ? null : Math.round(((item.area / total * 100) + Number.EPSILON) * 100) / 100,
+      Personalizado: personalizado
+    };
+  });
+}
+function showSource(key) {
+  const f = FUENTES[key], state = estados[key];
+  select.value = key; tableTitle.textContent = f.nombre;
+  if (!state?.rows) { tableMeta.textContent = ""; tableContainer.className = "empty"; tableContainer.textContent = f.detalle; return; }
+  tableMeta.textContent = f.detalle;
+  renderTable(state.rows, key);
+  setGlobal(`${f.nombre}: ${state.rows.length.toLocaleString("es-UY")} filas cargadas.`, "ok");
+}
+async function loadSource(key, force=false) {
+  const f = FUENTES[key]; tableTitle.textContent = f.nombre; tableMeta.textContent = "";
+  if (f.tipo === "pendiente") {
+    select.value = key; tableContainer.className = "empty"; tableContainer.textContent = f.detalle; setGlobal("Esta tabla depende de otra consulta y se conectará después.","error"); return;
+  }
+  if (estados[key]?.loading) return;
+  if (estados[key]?.rows && !force) { showSource(key); return; }
+  select.value = key;
+  estados[key] = {...estados[key], loading:true, error:null}; renderSourceList();
+  loadButton.disabled = true; loadAllButton.disabled = true;
+  tableContainer.className = "empty"; tableContainer.textContent = `Descargando y preparando ${f.nombre}…`; setGlobal(`Cargando ${f.nombre}…`);
+  try {
+    let rows;
+    if (f.tipo === "derivada") {
+      if (!estados.padrones?.rows) await loadSource("padrones");
+      if (!estados.padrones?.rows) throw new Error("No se pudo cargar FAS - PADRONES, que es la fuente de esta tabla.");
+      rows = runPorcentajeQuery(estados.padrones.rows);
+      tableMeta.textContent = "Calculada desde FAS - PADRONES · agrupada por predio y región";
+    } else {
+      const bytes = await fetchBytes(f.url);
+      if (f.tipo === "xlsb") {
+        const wb = XLSX.read(bytes,{type:"array",cellDates:true});
+        const ws = wb.Sheets[f.hoja]; if (!ws) throw new Error(`No se encontró la hoja «${f.hoja}». Hojas disponibles: ${wb.SheetNames.join(", ")}`);
+        rows = rowsFromSheet(ws, key === "produccion" ? 6 : 0);
+        if (key === "recibo") rows = runReciboQuery(rows);
+        if (key === "produccion") rows = runProduccionQuery(rows);
+        tableMeta.textContent = `${f.hoja} · vista de hasta 100 filas`;
+      } else if (f.tipo === "csv") {
+        const text = new TextDecoder("utf-8").decode(bytes); rows = runPadronesQuery(text);
+        tableMeta.textContent = "Base_Lavardin.csv · consulta Power Query simulada · vista de hasta 100 filas";
+      } else {
+        const text = new TextDecoder("utf-8").decode(bytes); rows = normalizeJsonRows(JSON.parse(text));
+        tableMeta.textContent = "JSON recibido · estructura sin transformar · vista de hasta 100 filas";
+      }
+    }
+    estados[key] = {rows}; renderSourceList(); tableMeta.textContent = f.detalle; renderTable(rows, key); setGlobal(`${f.nombre}: ${rows.length.toLocaleString("es-UY")} filas cargadas.`,"ok");
+  } catch (err) {
+    estados[key] = {error:String(err)}; renderSourceList(); tableContainer.className = "empty";
+    const details = document.createElement("div"); details.textContent = `No se pudo leer la fuente. ${err.message || err}`; tableContainer.append(details);
+    const hint = document.createElement("div"); hint.style.marginTop="8px"; hint.textContent = "Si el enlace abre y descarga en una pestaña pero aquí falla, probablemente el navegador no permitió la lectura desde la web por la política CORS de Dropbox."; tableContainer.append(hint);
+    setGlobal(`Error al cargar ${f.nombre}.`,"error");
+  } finally { loadButton.disabled = false; loadAllButton.disabled = false; renderSourceList(); }
+}
+async function loadAllSources() {
+  loadAllButton.disabled = true; loadButton.disabled = true;
+  const ordenCarga = ["recibo","produccion","padrones","porcentaje","origenes","pilas"];
+  const keys = ordenCarga.filter(key => FUENTES[key].tipo !== "pendiente");
+  for (const key of keys) await loadSource(key, false);
+  const loaded = keys.filter(key => estados[key]?.rows).length;
+  const failed = keys.filter(key => estados[key]?.error).length;
+  const pending = Object.keys(FUENTES).filter(key => FUENTES[key].tipo === "pendiente").length;
+  const cls = failed ? "error" : "ok";
+  setGlobal(`Carga finalizada: ${loaded} cargadas, ${failed} con error y ${pending} pendientes.`, cls);
+  loadAllButton.disabled = false; loadButton.disabled = false; renderSourceList();
+}
+function normalizarColumna(nombre) {
+  return String(nombre).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+function renderTable(rows, sourceKey) {
+  if (!rows.length) { tableContainer.className="empty"; tableContainer.textContent="La consulta no devolvió filas."; return; }
+  const excluidas = COLUMNAS_EXCLUIR[sourceKey] ?? new Set();
+  const cols = [...new Set(rows.flatMap(row => row && typeof row === "object" ? Object.keys(row) : []))]
+    .filter(col => !excluidas.has(normalizarColumna(col)));
+  const wrap = document.createElement("div"); wrap.className="table-wrap";
+  const table = document.createElement("table"), thead = document.createElement("thead"), trh = document.createElement("tr");
+  cols.forEach(c => { const th=document.createElement("th"); th.textContent=c; th.title=c; trh.append(th); }); thead.append(trh); table.append(thead);
+  const tbody=document.createElement("tbody");
+  rows.slice(0,100).forEach(row => { const tr=document.createElement("tr"); cols.forEach(c => { const td=document.createElement("td"); const v=row?.[c]; td.textContent=v == null ? "" : (typeof v === "object" ? JSON.stringify(v) : String(v)); td.title=td.textContent; tr.append(td); }); tbody.append(tr); });
+  table.append(tbody); wrap.append(table); tableContainer.className=""; tableContainer.replaceChildren(wrap);
+  tableMeta.textContent += ` · mostrando ${Math.min(rows.length,100).toLocaleString("es-UY")} de ${rows.length.toLocaleString("es-UY")}`;
+}
+renderSourceList();
+loadButton.addEventListener("click",()=>loadSource(select.value));
+loadAllButton.addEventListener("click",loadAllSources);
+select.addEventListener("change",()=>{const key=select.value;tableTitle.textContent=FUENTES[key].nombre;tableMeta.textContent="";if(estados[key]?.rows)showSource(key);else{tableContainer.className="empty";tableContainer.textContent=FUENTES[key].detalle;setGlobal("Fuente seleccionada.");}});
+loadAllSources();
+</script>
+</body>
+</html>
