@@ -83,6 +83,11 @@ const FUENTES = {
 // Columnas ocultas únicamente en la vista. Los datos originales permanecen cargados
 // por si alguna transformación posterior necesita alguno de estos campos.
 const COLUMNAS_EXCLUIR = {
+  recibo: new Set([
+    "HoraRto", "HoraSalida", "Observaciones", "FechaRtoOrigen", "CodigoGIS",
+    "Distancia", "Column36", "Column37", "Column38", "Column39", "Column40",
+    "Column41", "Column42"
+  ]),
   produccion: new Set([
     "Hours", "Turnos", "Hs Sin Madera", "BDMT per hour", "Scale figures",
     "Knive changes", "Comments", "Semanal", "Oversize", "Overthick", "Accept",
