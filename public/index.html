@@ -69,7 +69,7 @@ const FUENTES = {
   recibo: {
     nombre: "RECIBO",
     tipo: "xlsb",
-    url: "https://dl.dropbox.com/scl/fi/2v6t2q2q5gl4es9za5b1n/RECIBO-2019-HOY.xlsb?rlkey=7yxhx0g4ekxdhq78yqjvd4gd0&dl=1",
+    url: "/api/source/recibo",
     hoja: "Hoja1",
     detalle: "RECIBO-2019-HOY.xlsb · Hoja Hoja1 · filtros Power Query aplicados"
   },
@@ -81,26 +81,26 @@ const FUENTES = {
   produccion: {
     nombre: "PRODUCCIÓN BDMT",
     tipo: "xlsb",
-    url: "https://dl.dropbox.com/scl/fi/tea9x25yuk16z3sq10r0b/STOCK-BDMT.xlsb?rlkey=acb4pg232u6e9vprw89gir8yc&dl=1",
+    url: "/api/source/produccion",
     hoja: "Producción",
     detalle: "STOCK-BDMT.xlsb · Hoja Producción · últimos 180 días"
   },
   padrones: {
     nombre: "FAS - PADRONES",
     tipo: "csv",
-    url: "https://dl.dropbox.com/scl/fi/cj7qozof4pnbmnh514ihu/Base_Lavardin.csv?rlkey=g8cgi01p23u163v4ceidjft1i&dl=1",
+    url: "/api/source/padrones",
     detalle: "Base_Lavardin.csv · UTF-8 · agrupado por predio, catastro y especie"
   },
   origenes: {
     nombre: "ORIGENES",
     tipo: "json",
-    url: "https://dl.dropbox.com/scl/fi/lcvxvpa37thl53uqda5r5/origenes.json?rlkey=7kkrhmno4lfmjq86kl7hx8884&dl=1",
+    url: "/api/source/origenes",
     detalle: "origenes.json · ordenar por código descendente"
   },
   pilas: {
     nombre: "PILAS MONTES",
     tipo: "json",
-    url: "https://dl.dropbox.com/scl/fi/wq1ar9eqt5k5x4qs516jd/MedicionesFAS.json?rlkey=m33ih0i8i9nip3uhqj9uz0a73&dl=1",
+    url: "/api/source/pilas",
     detalle: "MedicionesFAS.json · estructura y filtros de la tabla por confirmar"
   }
 };
@@ -188,7 +188,8 @@ function renderSourceList() {
 }
 function setGlobal(message, cls="") { globalStatus.textContent = message; globalStatus.className = `status ${cls}`; }
 function normalizeUrl(url) {
-  const u = new URL(url); u.searchParams.set("dl","1"); return u.toString();
+  if (String(url).startsWith("/api/")) return url;
+  const u = new URL(url, window.location.origin); u.searchParams.set("dl","1"); return u.toString();
 }
 async function fetchBytes(url) {
   const response = await fetch(normalizeUrl(url), {cache:"no-store"});
@@ -417,7 +418,7 @@ async function loadSource(key, force=false) {
   } catch (err) {
     estados[key] = {error:String(err)}; renderSourceList(); tableContainer.className = "empty";
     const details = document.createElement("div"); details.textContent = `No se pudo leer la fuente. ${err.message || err}`; tableContainer.append(details);
-    const hint = document.createElement("div"); hint.style.marginTop="8px"; hint.textContent = "Si el enlace abre y descarga en una pestaña pero aquí falla, probablemente el navegador no permitió la lectura desde la web por la política CORS de Dropbox."; tableContainer.append(hint);
+    const hint = document.createElement("div"); hint.style.marginTop="8px"; hint.textContent = "Verificá que la variable secreta de esta fuente esté configurada en el Worker y que su enlace de Dropbox permita descargar el archivo."; tableContainer.append(hint);
     setGlobal(`Error al cargar ${f.nombre}.`,"error");
   } finally { loadButton.disabled = false; loadAllButton.disabled = false; renderSourceList(); }
 }
