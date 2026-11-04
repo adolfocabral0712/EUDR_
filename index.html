@@ -13,6 +13,7 @@
     main{max-width:1440px;margin:22px auto;padding:0 16px 36px}.toolbar,.panel,.source-card{background:var(--white);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 14px #16324d0a}
     .toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap;padding:16px;margin-bottom:16px}.field{display:flex;flex-direction:column;gap:5px;min-width:220px}.field label{font-weight:650;color:var(--navy)}select,button{font:inherit;border-radius:8px;padding:10px 12px}select{border:1px solid #b9c7d2;background:white;color:var(--ink)}button{border:0;background:var(--gold);color:#24313c;font-weight:700;cursor:pointer}button:hover{filter:brightness(.96)}button:disabled{opacity:.65;cursor:wait}
     .status{margin-left:auto;color:var(--muted);font-size:13px}.status.ok{color:var(--green)}.status.error{color:var(--red)}
+    .shipment-box{background:var(--white);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 4px 14px #16324d0a}.shipment-box h2{margin:0 0 12px;color:var(--navy);font-size:17px}.shipment-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;align-items:end}.shipment-fields label{display:flex;flex-direction:column;gap:5px;font-weight:650;color:var(--navy)}.shipment-fields input{width:100%;font:inherit;padding:10px 12px;border:1px solid #b9c7d2;border-radius:8px;color:var(--ink);background:#fff}.shipment-fields output{display:block;min-height:40px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#f3f6f8;font-weight:700;color:var(--navy)}.shipment-fields button{min-height:40px}.shipment-help{margin:10px 0 0;color:var(--muted);font-size:12px}
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-bottom:16px}.source-card{padding:15px;display:flex;flex-direction:column;align-items:flex-start;min-height:150px}.source-card h2{margin:0 0 5px;font-size:16px;color:var(--navy)}.source-card p{margin:0 0 10px;color:var(--muted);font-size:12px;flex:1}.badge{display:inline-block;border-radius:20px;padding:4px 9px;font-size:11px;font-weight:700;background:#edf1f4;color:#53616d}.badge.ready{background:#e2f3e9;color:var(--green)}.badge.pending{background:#fff3d4;color:#775700}.badge.error{background:#fae6e3;color:var(--red)}.badge.loading{background:#e4effa;color:#21618c}.card-button{margin-top:10px;padding:7px 11px;font-size:12px}.card-button.secondary{background:#e9eef2;color:var(--navy)}
     .panel{overflow:hidden}.panel-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.panel-head h2{font-size:17px;color:var(--navy);margin:0}.meta{color:var(--muted);font-size:12px}.table-wrap{overflow:auto;max-height:62vh}table{border-collapse:collapse;width:100%;min-width:760px;font-size:12px}th,td{padding:8px 10px;border-bottom:1px solid #e8edf1;text-align:left;white-space:nowrap;max-width:320px;overflow:hidden;text-overflow:ellipsis}table.centered th,table.centered td{text-align:center}th{position:sticky;top:0;background:#e9eef2;color:var(--navy);z-index:1}tbody tr:hover{background:#f7fafc}.empty{padding:28px;color:var(--muted);text-align:center}.note{margin-top:14px;background:#fff9e8;border:1px solid #f1dfaa;border-radius:10px;padding:12px 14px;color:#5b4b1c;font-size:13px}.footer{margin-top:12px;color:var(--muted);font-size:12px}
     @media(max-width:650px){header{padding:18px 16px}.toolbar{align-items:stretch}.field{min-width:100%}.status{margin-left:0;width:100%}.panel-head{align-items:flex-start}}
@@ -24,6 +25,22 @@
   <p>FAS · Exploración de fuentes y consultas Power Query</p>
 </header>
 <main>
+  <section class="shipment-box" aria-label="Datos del embarque">
+    <h2>Datos del embarque</h2>
+    <div class="shipment-fields">
+      <label for="embarqueBdmt">EMBARQUE BDMT
+        <input id="embarqueBdmt" type="text" inputmode="decimal" placeholder="Ej.: 7.613,81" autocomplete="off">
+      </label>
+      <label for="fechaCumplida">FECHA PRODUCCIÓN CANTIDAD CUMPLIDA
+        <input id="fechaCumplida" type="date">
+      </label>
+      <label>TOTAL MCS (BDMT / 0,6)
+        <output id="totalMcs">—</output>
+      </label>
+      <button id="searchProductionButton" type="button">Buscar en PRODUCCIÓN BDMT</button>
+    </div>
+    <p class="shipment-help">La búsqueda toma PRODUCCIÓN BDMT desde la fecha indicada hacia atrás y acumula la columna BDMT hasta alcanzar el embarque.</p>
+  </section>
   <section class="toolbar" aria-label="Controles de consulta">
     <div class="field"><label for="sourceSelect">Tabla a revisar</label><select id="sourceSelect"></select></div>
     <button id="loadButton" type="button">Cargar seleccionada</button>
@@ -121,6 +138,10 @@ const globalStatus = document.getElementById("globalStatus");
 const tableTitle = document.getElementById("tableTitle");
 const tableMeta = document.getElementById("tableMeta");
 const tableContainer = document.getElementById("tableContainer");
+const embarqueBdmtInput = document.getElementById("embarqueBdmt");
+const fechaCumplidaInput = document.getElementById("fechaCumplida");
+const totalMcsOutput = document.getElementById("totalMcs");
+const searchProductionButton = document.getElementById("searchProductionButton");
 let estados = {};
 
 function statusText(sourceKey) {
@@ -185,6 +206,20 @@ function excelDateToIso(value) {
   const d = new Date(s); return Number.isNaN(d.valueOf()) ? null : d.toISOString().slice(0,10);
 }
 function toNumber(v) { if (typeof v === "number") return v; if (v == null || v === "") return null; const n = Number(String(v).replace(",",".")); return Number.isFinite(n) ? n : null; }
+function parseNumeroLocal(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const text = String(value ?? "").trim().replace(/\s/g, "");
+  if (!text) return null;
+  let normalized = text;
+  if (text.includes(",") && text.includes(".")) normalized = text.replace(/\./g, "").replace(",", ".");
+  else if (text.includes(",")) normalized = text.replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+function actualizarTotalMcs() {
+  const bdmt = parseNumeroLocal(embarqueBdmtInput.value);
+  totalMcsOutput.textContent = bdmt == null ? "—" : FORMATO_NUMERO.format(bdmt / 0.6);
+}
 function runReciboQuery(rows) {
   return rows.filter(r => String(r["Depósito"] ?? "") === "FRIMOSA" && ["entrada","Entrada a granel"].includes(String(r["Tipo Remito"] ?? "")) && !String(r["NombreProd2"] ?? "").includes("Troz") && Number(r["AÑO"]) >= 2024 && (excelDateToIso(r["FechaRto"]) ?? "") > "2025-12-31");
 }
@@ -455,11 +490,57 @@ function renderTable(rows, sourceKey) {
   table.append(tbody); wrap.append(table); tableContainer.className=""; tableContainer.replaceChildren(wrap);
   tableMeta.textContent += ` · ${rows.length.toLocaleString("es-UY")} filas totales`;
 }
+async function buscarProduccionEmbarque() {
+  const objetivoBdmt = parseNumeroLocal(embarqueBdmtInput.value);
+  const fechaLimite = fechaCumplidaInput.value;
+  if (objetivoBdmt == null || objetivoBdmt <= 0) {
+    setGlobal("Ingresá un EMBARQUE BDMT mayor que cero.", "error");
+    embarqueBdmtInput.focus();
+    return;
+  }
+  if (!fechaLimite) {
+    setGlobal("Ingresá la fecha de producción cumplida.", "error");
+    fechaCumplidaInput.focus();
+    return;
+  }
+  if (!estados.produccion?.rows) await loadSource("produccion");
+  const sourceRows = estados.produccion?.rows;
+  if (!sourceRows) return;
+  const disponibles = sourceRows
+    .filter(row => row.Fecha && row.Fecha <= fechaLimite)
+    .slice()
+    .sort((a,b) => String(b.Fecha).localeCompare(String(a.Fecha)));
+  const seleccion = [];
+  let acumulado = 0;
+  for (const row of disponibles) {
+    const valor = parseNumeroLocal(row[" BDMT"]);
+    if (valor == null || valor <= 0) continue;
+    seleccion.push(row);
+    acumulado += valor;
+    if (acumulado >= objetivoBdmt) break;
+  }
+  select.value = "produccion";
+  tableTitle.textContent = "BÚSQUEDA · PRODUCCIÓN BDMT";
+  tableMeta.textContent = `Embarque ${FORMATO_NUMERO.format(objetivoBdmt)} BDMT · fecha límite ${obtenerFechaFormateada(fechaLimite, "Fecha")} · acumulado ${FORMATO_NUMERO.format(acumulado)} BDMT · equivalente ${FORMATO_NUMERO.format(acumulado / 0.6)} MCS`;
+  if (acumulado < objetivoBdmt) tableMeta.textContent += " · no hay producción suficiente hasta esa fecha";
+  if (!seleccion.length) {
+    tableContainer.className = "empty";
+    tableContainer.textContent = "No se encontraron registros de producción hasta la fecha indicada.";
+    setGlobal("La búsqueda no encontró producción para ese período.", "error");
+    return;
+  }
+  renderTable(seleccion, "produccion");
+  setGlobal(`${seleccion.length.toLocaleString("es-UY")} filas seleccionadas · ${FORMATO_NUMERO.format(acumulado)} BDMT acumulados.`, "ok");
+}
 renderSourceList();
 loadButton.addEventListener("click",()=>loadSource(select.value));
 loadAllButton.addEventListener("click",loadAllSources);
+embarqueBdmtInput.addEventListener("input", actualizarTotalMcs);
+searchProductionButton.addEventListener("click", buscarProduccionEmbarque);
 select.addEventListener("change",()=>{const key=select.value;tableTitle.textContent=FUENTES[key].nombre;tableMeta.textContent="";if(estados[key]?.rows)showSource(key);else{tableContainer.className="empty";tableContainer.textContent=FUENTES[key].detalle;setGlobal("Fuente seleccionada.");}});
 loadAllSources();
 </script>
 </body>
 </html>
+index.html
+HTML
