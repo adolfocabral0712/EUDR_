@@ -70,7 +70,7 @@ const FUENTES = {
     nombre: "ORIGENES",
     tipo: "json",
     url: "https://dl.dropbox.com/scl/fi/lcvxvpa37thl53uqda5r5/origenes.json?rlkey=7kkrhmno4lfmjq86kl7hx8884&dl=1",
-    detalle: "origenes.json · estructura por confirmar"
+    detalle: "origenes.json · ordenar por código descendente"
   },
   pilas: {
     nombre: "PILAS MONTES",
@@ -101,8 +101,7 @@ const COLUMNAS_EXCLUIR = {
   ]),
   origenes: new Set([
     "paga_flete", "seccion_judicial", "padron", "descripcion_del_acceso", "distancia",
-    "estado", "tipo_de_producto", "categoria_certificacion", "proveedor_fondo",
-    "codigo_proveedor", "manejo", "fondo", "activo", "fecha_modificacion",
+    "estado", "manejo", "fondo", "activo", "fecha_modificacion",
     "unnamed_11", "unnamed_12", "unnamed_13", "unnamed_14", "unnamed_15", "unnamed_16",
     "num", "orighe", "tipo_de_origen", "codigo_gis", "email_del_origen",
     "fas id", "fas id2", "fas id3", "fas_id", "fas_id2", "fas_id3"
@@ -196,6 +195,46 @@ function normalizeJsonRows(data) {
     return [data];
   }
   return [];
+}
+
+function normalizarClaveOrigen(nombre) {
+  return normalizarColumna(nombre).replace(/[^a-z0-9]/g, "");
+}
+function buscarValorOrigen(row, aliases) {
+  const buscados = new Set(aliases.map(normalizarClaveOrigen));
+  const item = Object.entries(row ?? {}).find(([key, value]) =>
+    buscados.has(normalizarClaveOrigen(key)) && value != null && String(value).trim() !== ""
+  );
+  return item ? item[1] : null;
+}
+function runOrigenesQuery(data) {
+  const campos = [
+    {nombre:"Tipo de Producto", aliases:["tipo_de_producto","tipo producto","producto_tipo"]},
+    {nombre:"Categoría Certificación", aliases:["categoria_certificacion","categoria certificacion"]},
+    {nombre:"Proveedor/Fondo", aliases:["proveedor_fondo","proveedor fondo"]},
+    {nombre:"Codigo Proveedor", aliases:["codigo_proveedor","codigo proveedor"]}
+  ];
+  const filas = normalizeJsonRows(data).map(original => {
+    const row = {...original};
+    for (const campo of campos) {
+      const aliases = new Set(campo.aliases.map(normalizarClaveOrigen));
+      for (const key of Object.keys(row)) {
+        if (aliases.has(normalizarClaveOrigen(key))) delete row[key];
+      }
+      row[campo.nombre] = buscarValorOrigen(original, campo.aliases);
+    }
+    return row;
+  });
+  const codigos = ["codigo","codigo_gis","codigo_origen","codigo_proveedor","orighe","num"];
+  const valorCodigo = row => buscarValorOrigen(row, codigos);
+  filas.sort((a,b) => {
+    const ca = valorCodigo(a), cb = valorCodigo(b);
+    if (ca == null && cb == null) return 0;
+    if (ca == null) return 1;
+    if (cb == null) return -1;
+    return String(cb).localeCompare(String(ca), "es", {numeric:true,sensitivity:"base"});
+  });
+  return filas;
 }
 function parseCsvNoQuotes(text) {
   // Replica el delimitador coma y QuoteStyle.None de la consulta Power Query.
@@ -310,7 +349,7 @@ async function loadSource(key, force=false) {
         const text = new TextDecoder("utf-8").decode(bytes); rows = runPadronesQuery(text);
         tableMeta.textContent = "Base_Lavardin.csv · consulta Power Query simulada · vista de hasta 100 filas";
       } else {
-        const text = new TextDecoder("utf-8").decode(bytes); rows = normalizeJsonRows(JSON.parse(text));
+        const text = new TextDecoder("utf-8").decode(bytes); const json = JSON.parse(text); rows = key === "origenes" ? runOrigenesQuery(json) : normalizeJsonRows(json);
         tableMeta.textContent = "JSON recibido · estructura sin transformar · vista de hasta 100 filas";
       }
     }
@@ -338,16 +377,71 @@ async function loadAllSources() {
 function normalizarColumna(nombre) {
   return String(nombre).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
+function normalizarNombreCampo(nombre) {
+  return normalizarColumna(nombre).replace(/[^a-z0-9]/g, "");
+}
+const FORMATO_NUMERO = new Intl.NumberFormat("es-UY", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+});
+function esCampoIdentificador(nombre) {
+  const n = normalizarNombreCampo(nombre);
+  return n.startsWith("codigo") || n === "id" || n.endsWith("id") ||
+    n.includes("gis") || n.includes("remito") ||
+    ["year","ano","mes","month","quincena","semana","week","num","numero"].includes(n);
+}
+function obtenerFechaFormateada(valor, columna) {
+  if (valor instanceof Date && !Number.isNaN(valor.valueOf())) return `${String(valor.getUTCDate()).padStart(2,"0")}/${String(valor.getUTCMonth()+1).padStart(2,"0")}/${valor.getUTCFullYear()}`;
+  const nombreColumna = normalizarNombreCampo(columna);
+  const columnaFecha = nombreColumna.includes("fecha") || nombreColumna === "date" || nombreColumna.endsWith("date");
+  if (columnaFecha && typeof valor === "number" && Number.isFinite(valor)) {
+    const iso = excelDateToIso(valor);
+    if (iso) return obtenerFechaFormateada(iso, columna);
+  }
+  if (typeof valor !== "string") return null;
+  const texto = valor.trim();
+  let m = texto.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|T|\s)/);
+  if (m) return `${m[3].padStart(2,"0")}/${m[2].padStart(2,"0")}/${m[1]}`;
+  m = texto.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/);
+  if (m) return `${m[1].padStart(2,"0")}/${m[2].padStart(2,"0")}/${m[3]}`;
+  return null;
+}
+function obtenerNumeroFormateable(valor) {
+  if (typeof valor === "number" && Number.isFinite(valor)) return valor;
+  if (typeof valor !== "string") return null;
+  const texto = valor.trim().replace(/\s/g, "");
+  if (!texto || !/^[+-]?[\d.,]+$/.test(texto)) return null;
+  let normalizado = texto;
+  if (/^[+-]?\d{1,3}(\.\d{3})+(,\d+)?$/.test(texto)) {
+    normalizado = texto.replace(/\./g, "").replace(",", ".");
+  } else if (/^[+-]?\d+,\d+$/.test(texto)) {
+    normalizado = texto.replace(",", ".");
+  } else if (/^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(texto)) {
+    normalizado = texto.replace(/,/g, "");
+  }
+  const numero = Number(normalizado);
+  return Number.isFinite(numero) ? numero : null;
+}
+function formatearCelda(valor, columna) {
+  if (valor == null || valor === "") return "";
+  if (valor instanceof Date) return obtenerFechaFormateada(valor) ?? "";
+  const fecha = obtenerFechaFormateada(valor, columna);
+  if (fecha) return fecha;
+  if (esCampoIdentificador(columna)) return String(valor);
+  const numero = obtenerNumeroFormateable(valor);
+  if (numero != null) return FORMATO_NUMERO.format(numero);
+  return typeof valor === "object" ? JSON.stringify(valor) : String(valor);
+}
 function renderTable(rows, sourceKey) {
   if (!rows.length) { tableContainer.className="empty"; tableContainer.textContent="La consulta no devolvió filas."; return; }
-  const excluidas = COLUMNAS_EXCLUIR[sourceKey] ?? new Set();
+  const excluidas = new Set([...(COLUMNAS_EXCLUIR[sourceKey] ?? [])].map(normalizarColumna));
   const cols = [...new Set(rows.flatMap(row => row && typeof row === "object" ? Object.keys(row) : []))]
     .filter(col => !excluidas.has(normalizarColumna(col)));
   const wrap = document.createElement("div"); wrap.className="table-wrap";
   const table = document.createElement("table"), thead = document.createElement("thead"), trh = document.createElement("tr");
   cols.forEach(c => { const th=document.createElement("th"); th.textContent=c; th.title=c; trh.append(th); }); thead.append(trh); table.append(thead);
   const tbody=document.createElement("tbody");
-  rows.slice(0,100).forEach(row => { const tr=document.createElement("tr"); cols.forEach(c => { const td=document.createElement("td"); const v=row?.[c]; td.textContent=v == null ? "" : (typeof v === "object" ? JSON.stringify(v) : String(v)); td.title=td.textContent; tr.append(td); }); tbody.append(tr); });
+  rows.slice(0,100).forEach(row => { const tr=document.createElement("tr"); cols.forEach(c => { const td=document.createElement("td"); const v=row?.[c]; td.textContent=formatearCelda(v,c); td.title=td.textContent; tr.append(td); }); tbody.append(tr); });
   table.append(tbody); wrap.append(table); tableContainer.className=""; tableContainer.replaceChildren(wrap);
   tableMeta.textContent += ` · mostrando ${Math.min(rows.length,100).toLocaleString("es-UY")} de ${rows.length.toLocaleString("es-UY")}`;
 }
