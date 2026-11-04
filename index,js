@@ -7,10 +7,13 @@ const SOURCE_SECRETS = {
 };
 
 function jsonError(message, status = 500) {
-  return Response.json({ error: message }, {
-    status,
-    headers: { "Cache-Control": "no-store" },
-  });
+  return Response.json(
+    { error: message },
+    {
+      status,
+      headers: { "Cache-Control": "no-store" },
+    }
+  );
 }
 
 export default {
@@ -29,16 +32,19 @@ export default {
 
       const sourceKey = url.pathname.slice(prefix.length);
       const secretName = SOURCE_SECRETS[sourceKey];
+
       if (!secretName) {
         return jsonError("Fuente no reconocida.", 404);
       }
 
       const sourceUrl = env[secretName];
+
       if (!sourceUrl) {
         return jsonError(`Falta configurar el secreto ${secretName}.`, 503);
       }
 
       let upstream;
+
       try {
         upstream = await fetch(sourceUrl, {
           method: "GET",
