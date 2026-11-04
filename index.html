@@ -37,9 +37,9 @@
       <label>TOTAL MCS (BDMT / 0,6)
         <output id="totalMcs">—</output>
       </label>
-      <button id="searchProductionButton" type="button">Buscar en PRODUCCIÓN BDMT</button>
+      <button id="searchProductionButton" type="button">Generar cuadro desde RECIBO</button>
     </div>
-    <p class="shipment-help">La búsqueda toma PRODUCCIÓN BDMT desde la fecha indicada hacia atrás y acumula la columna BDMT hasta alcanzar el embarque.</p>
+    <p class="shipment-help">Desde la fecha indicada, toma ingresos de RECIBO hacia atrás hasta encontrar el total MCS más cercano dentro de ±50 MCS; luego agrupa por origen y producto y prorratea por departamento.</p>
   </section>
   <section class="toolbar" aria-label="Controles de consulta">
     <div class="field"><label for="sourceSelect">Tabla a revisar</label><select id="sourceSelect"></select></div>
@@ -52,7 +52,11 @@
     <div class="panel-head"><h2 id="tableTitle">Vista de datos</h2><span id="tableMeta" class="meta"></span></div>
     <div id="tableContainer" class="empty">Las filas aparecerán aquí al cargar una fuente.</div>
   </section>
-  <div class="note"><strong>Etapa actual:</strong> cargar y revisar cada tabla por separado. Los cruces y la generación de la declaración se incorporarán después de confirmar las fuentes y sus columnas.</div>
+  <section class="panel" id="shipmentSummaryPanel" style="margin-top:16px;display:none">
+    <div class="panel-head"><h2>Cuadro del embarque por origen, producto y departamento</h2><span id="shipmentSummaryMeta" class="meta"></span></div>
+    <div id="shipmentSummaryContainer" class="empty">Ingresá el embarque y la fecha para generar el cuadro.</div>
+  </section>
+  <div class="note"><strong>Cuadro:</strong> se arma con los ingresos seleccionados de RECIBO y distribuye los MCS y el BDMT del embarque por origen, producto y departamento.</div>
   <div class="footer">Las consultas con una ruta local de Windows quedan pendientes hasta disponer de un enlace compartido accesible desde la web.</div>
 </main>
 <script>
@@ -142,6 +146,9 @@ const embarqueBdmtInput = document.getElementById("embarqueBdmt");
 const fechaCumplidaInput = document.getElementById("fechaCumplida");
 const totalMcsOutput = document.getElementById("totalMcs");
 const searchProductionButton = document.getElementById("searchProductionButton");
+const shipmentSummaryPanel = document.getElementById("shipmentSummaryPanel");
+const shipmentSummaryMeta = document.getElementById("shipmentSummaryMeta");
+const shipmentSummaryContainer = document.getElementById("shipmentSummaryContainer");
 let estados = {};
 
 function statusText(sourceKey) {
@@ -490,6 +497,100 @@ function renderTable(rows, sourceKey) {
   table.append(tbody); wrap.append(table); tableContainer.className=""; tableContainer.replaceChildren(wrap);
   tableMeta.textContent += ` · ${rows.length.toLocaleString("es-UY")} filas totales`;
 }
+function normalizarValorClave(valor) {
+  return String(valor ?? "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+}
+function valorPorAlias(row, aliases) {
+  const aliasSet = new Set(aliases.map(normalizarValorClave));
+  const encontrado = Object.entries(row ?? {}).find(([key, value]) => aliasSet.has(normalizarValorClave(key)) && value != null && String(value).trim() !== "");
+  return encontrado ? encontrado[1] : null;
+}
+function formatearNumeroLocal(valor) {
+  return valor == null || !Number.isFinite(Number(valor)) ? "" : FORMATO_NUMERO.format(Number(valor));
+}
+function renderShipmentSummary(rows, targetMcs, totalBdmt, fechaLimite) {
+  const totalSeleccionado = rows.reduce((sum,row) => sum + (parseNumeroLocal(valorPorAlias(row,["Metros Cubicos","metros_cubicos","MCS"])) ?? 0),0);
+  const grupos = new Map();
+  for (const row of rows) {
+    const origen = String(valorPorAlias(row,["Origen"]) ?? "SIN ORIGEN").trim();
+    const producto = String(valorPorAlias(row,["NombreProd2","NombreProd","Producto"]) ?? "SIN PRODUCTO").trim();
+    const mcs = parseNumeroLocal(valorPorAlias(row,["Metros Cubicos","metros_cubicos","MCS"])) ?? 0;
+    const key = JSON.stringify([normalizarValorClave(origen),normalizarValorClave(producto)]);
+    if (!grupos.has(key)) grupos.set(key,{origen,producto,mcs:0});
+    grupos.get(key).mcs += mcs;
+  }
+
+  const porcentajeRows = estados.porcentaje?.rows ?? [];
+  const origenRows = estados.origenes?.rows ?? [];
+  const departmentMap = new Map();
+  for (const row of porcentajeRows) {
+    const farm = normalizarValorClave(row._farmgdb);
+    if (!farm) continue;
+    if (!departmentMap.has(farm)) departmentMap.set(farm,[]);
+    departmentMap.get(farm).push({region:row._region ?? "",percentage:parseNumeroLocal(row.Porcentaje) ?? 0});
+  }
+  const origenInfo = new Map();
+  for (const row of origenRows) {
+    const nombres = ["nombre_fas","nombre","nombre_origen","origen","predio","farmgdb","_farmgdb","nombreempresa","nombre_empresa"]
+      .map(alias => valorPorAlias(row,[alias])).filter(v => v != null && String(v).trim());
+    const manejo = valorPorAlias(row,["manejo","manejo_forestal","forest_management"]);
+    for (const nombre of nombres) origenInfo.set(normalizarValorClave(nombre),manejo ?? "");
+  }
+
+  const filasCuadro = [];
+  for (const grupo of grupos.values()) {
+    const shareOrigenProducto = totalSeleccionado ? grupo.mcs / totalSeleccionado : 0;
+    const deptos = departmentMap.get(normalizarValorClave(grupo.origen));
+    const reparto = deptos?.length ? deptos : [{region:"",percentage:100}];
+    const manejo = origenInfo.get(normalizarValorClave(grupo.origen)) ?? valorPorAlias(
+      origenRows.find(row => Object.values(row).some(value => normalizarValorClave(value) === normalizarValorClave(grupo.origen))) ?? {},
+      ["manejo","manejo_forestal","forest_management"]
+    ) ?? "";
+    for (const depto of reparto) {
+      const pesoDepto = depto.percentage / 100;
+      const porcentajeTotal = shareOrigenProducto * pesoDepto * 100;
+      filasCuadro.push({
+        "ORIGEN":grupo.origen,
+        "PRODUCTO":grupo.producto,
+        "MCS ORIGEN/PRODUCTO":grupo.mcs * pesoDepto,
+        "% DEL TOTAL":porcentajeTotal,
+        "DEPARTAMENTO":depto.region,
+        "% DEPARTAMENTO":depto.percentage,
+        "MCS PRORRATEADOS":grupo.mcs * pesoDepto,
+        "BDMT PRORRATEADOS":totalBdmt * porcentajeTotal / 100,
+        "MANEJO FORESTAL":manejo
+      });
+    }
+  }
+
+  shipmentSummaryPanel.style.display = "block";
+  const diferencia = totalSeleccionado - targetMcs;
+  shipmentSummaryMeta.textContent = `Fecha de corte: ${obtenerFechaFormateada(fechaLimite,"Fecha")} · objetivo ${FORMATO_NUMERO.format(targetMcs)} MCS · seleccionado ${FORMATO_NUMERO.format(totalSeleccionado)} MCS · diferencia ${diferencia >= 0 ? "+" : ""}${FORMATO_NUMERO.format(diferencia)} · ${rows.length.toLocaleString("es-UY")} ingresos`;
+  if (Math.abs(diferencia) > 50) shipmentSummaryMeta.textContent += " · fuera del rango de ±50 MCS";
+  if (!filasCuadro.length) {
+    shipmentSummaryContainer.className = "empty";
+    shipmentSummaryContainer.textContent = "No se generaron filas para el cuadro.";
+    return;
+  }
+  const wrap = document.createElement("div"); wrap.className = "table-wrap";
+  const table = document.createElement("table"); table.className = "centered";
+  const thead = document.createElement("thead"), headRow = document.createElement("tr");
+  const cols = Object.keys(filasCuadro[0]);
+  cols.forEach(col => { const th=document.createElement("th"); th.textContent=col; th.title=col; headRow.append(th); });
+  thead.append(headRow); table.append(thead);
+  const tbody = document.createElement("tbody");
+  filasCuadro.forEach(row => {
+    const tr=document.createElement("tr");
+    cols.forEach(col => {
+      const td=document.createElement("td");
+      const value=row[col];
+      td.textContent=typeof value === "number" ? formatearNumeroLocal(value) + (col.includes("%") ? "%" : "") : String(value ?? "");
+      td.title=td.textContent; tr.append(td);
+    });
+    tbody.append(tr);
+  });
+  table.append(tbody); wrap.append(table); shipmentSummaryContainer.className=""; shipmentSummaryContainer.replaceChildren(wrap);
+}
 async function buscarProduccionEmbarque() {
   const objetivoBdmt = parseNumeroLocal(embarqueBdmtInput.value);
   const fechaLimite = fechaCumplidaInput.value;
@@ -503,34 +604,41 @@ async function buscarProduccionEmbarque() {
     fechaCumplidaInput.focus();
     return;
   }
-  if (!estados.produccion?.rows) await loadSource("produccion");
-  const sourceRows = estados.produccion?.rows;
-  if (!sourceRows) return;
-  const disponibles = sourceRows
-    .filter(row => row.Fecha && row.Fecha <= fechaLimite)
-    .slice()
-    .sort((a,b) => String(b.Fecha).localeCompare(String(a.Fecha)));
-  const seleccion = [];
-  let acumulado = 0;
-  for (const row of disponibles) {
-    const valor = parseNumeroLocal(row[" BDMT"]);
-    if (valor == null || valor <= 0) continue;
-    seleccion.push(row);
-    acumulado += valor;
-    if (acumulado >= objetivoBdmt) break;
+  if (!estados.recibo?.rows) await loadSource("recibo");
+  if (!estados.recibo?.rows) return;
+  if (!estados.porcentaje?.rows) await loadSource("porcentaje");
+  if (!estados.origenes?.rows) await loadSource("origenes");
+  const disponibles = estados.recibo.rows
+    .map(row => ({row,fecha:excelDateToIso(valorPorAlias(row,["FechaRto"]))}))
+    .filter(item => item.fecha && item.fecha <= fechaLimite && parseNumeroLocal(valorPorAlias(item.row,["Metros Cubicos","metros_cubicos","MCS"])) > 0)
+    .sort((a,b) => b.fecha.localeCompare(a.fecha));
+  const objetivoMcs = objetivoBdmt / 0.6;
+  const acumulados = [{cantidad:0,filas:[]}];
+  let suma = 0, prefijo = [];
+  for (const item of disponibles) {
+    const mcs = parseNumeroLocal(valorPorAlias(item.row,["Metros Cubicos","metros_cubicos","MCS"])) ?? 0;
+    prefijo = [...prefijo,item.row];
+    suma += mcs;
+    acumulados.push({cantidad:suma,filas:prefijo});
+    if (suma > objetivoMcs + 50) break;
   }
-  select.value = "produccion";
-  tableTitle.textContent = "BÚSQUEDA · PRODUCCIÓN BDMT";
-  tableMeta.textContent = `Embarque ${FORMATO_NUMERO.format(objetivoBdmt)} BDMT · fecha límite ${obtenerFechaFormateada(fechaLimite, "Fecha")} · acumulado ${FORMATO_NUMERO.format(acumulado)} BDMT · equivalente ${FORMATO_NUMERO.format(acumulado / 0.6)} MCS`;
-  if (acumulado < objetivoBdmt) tableMeta.textContent += " · no hay producción suficiente hasta esa fecha";
+  const candidatos = acumulados.filter(item => item.cantidad > 0);
+  candidatos.sort((a,b) => Math.abs(a.cantidad-objetivoMcs)-Math.abs(b.cantidad-objetivoMcs));
+  const seleccion = candidatos[0]?.filas ?? [];
   if (!seleccion.length) {
-    tableContainer.className = "empty";
-    tableContainer.textContent = "No se encontraron registros de producción hasta la fecha indicada.";
-    setGlobal("La búsqueda no encontró producción para ese período.", "error");
+    shipmentSummaryPanel.style.display = "block";
+    shipmentSummaryMeta.textContent = "";
+    shipmentSummaryContainer.className = "empty";
+    shipmentSummaryContainer.textContent = "No se encontraron ingresos en RECIBO hasta la fecha indicada.";
+    setGlobal("No se encontraron ingresos para esa fecha.", "error");
     return;
   }
-  renderTable(seleccion, "produccion");
-  setGlobal(`${seleccion.length.toLocaleString("es-UY")} filas seleccionadas · ${FORMATO_NUMERO.format(acumulado)} BDMT acumulados.`, "ok");
+  select.value = "recibo";
+  tableTitle.textContent = "RECIBO · INGRESOS CONSIDERADOS";
+  tableMeta.textContent = `${seleccion.length.toLocaleString("es-UY")} ingresos seleccionados desde la fecha indicada hacia atrás`;
+  renderTable(seleccion,"recibo");
+  renderShipmentSummary(seleccion,objetivoMcs,objetivoBdmt,fechaLimite);
+  setGlobal(`Cuadro generado: ${seleccion.length.toLocaleString("es-UY")} ingresos de RECIBO · ${FORMATO_NUMERO.format(seleccion.reduce((sum,row)=>sum+(parseNumeroLocal(valorPorAlias(row,["Metros Cubicos","metros_cubicos","MCS"]))??0),0))} MCS.`, "ok");
 }
 renderSourceList();
 loadButton.addEventListener("click",()=>loadSource(select.value));
@@ -542,5 +650,3 @@ loadAllSources();
 </script>
 </body>
 </html>
-index.html
-HTML
