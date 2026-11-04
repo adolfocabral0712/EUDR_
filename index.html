@@ -14,7 +14,7 @@
     .toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap;padding:16px;margin-bottom:16px}.field{display:flex;flex-direction:column;gap:5px;min-width:220px}.field label{font-weight:650;color:var(--navy)}select,button{font:inherit;border-radius:8px;padding:10px 12px}select{border:1px solid #b9c7d2;background:white;color:var(--ink)}button{border:0;background:var(--gold);color:#24313c;font-weight:700;cursor:pointer}button:hover{filter:brightness(.96)}button:disabled{opacity:.65;cursor:wait}
     .status{margin-left:auto;color:var(--muted);font-size:13px}.status.ok{color:var(--green)}.status.error{color:var(--red)}
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-bottom:16px}.source-card{padding:15px;display:flex;flex-direction:column;align-items:flex-start;min-height:150px}.source-card h2{margin:0 0 5px;font-size:16px;color:var(--navy)}.source-card p{margin:0 0 10px;color:var(--muted);font-size:12px;flex:1}.badge{display:inline-block;border-radius:20px;padding:4px 9px;font-size:11px;font-weight:700;background:#edf1f4;color:#53616d}.badge.ready{background:#e2f3e9;color:var(--green)}.badge.pending{background:#fff3d4;color:#775700}.badge.error{background:#fae6e3;color:var(--red)}.badge.loading{background:#e4effa;color:#21618c}.card-button{margin-top:10px;padding:7px 11px;font-size:12px}.card-button.secondary{background:#e9eef2;color:var(--navy)}
-    .panel{overflow:hidden}.panel-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.panel-head h2{font-size:17px;color:var(--navy);margin:0}.meta{color:var(--muted);font-size:12px}.table-wrap{overflow:auto;max-height:62vh}table{border-collapse:collapse;width:100%;min-width:760px;font-size:12px}th,td{padding:8px 10px;border-bottom:1px solid #e8edf1;text-align:left;white-space:nowrap;max-width:320px;overflow:hidden;text-overflow:ellipsis}th{position:sticky;top:0;background:#e9eef2;color:var(--navy);z-index:1}tbody tr:hover{background:#f7fafc}.empty{padding:28px;color:var(--muted);text-align:center}.note{margin-top:14px;background:#fff9e8;border:1px solid #f1dfaa;border-radius:10px;padding:12px 14px;color:#5b4b1c;font-size:13px}.footer{margin-top:12px;color:var(--muted);font-size:12px}
+    .panel{overflow:hidden}.panel-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.panel-head h2{font-size:17px;color:var(--navy);margin:0}.meta{color:var(--muted);font-size:12px}.table-wrap{overflow:auto;max-height:62vh}table{border-collapse:collapse;width:100%;min-width:760px;font-size:12px}th,td{padding:8px 10px;border-bottom:1px solid #e8edf1;text-align:left;white-space:nowrap;max-width:320px;overflow:hidden;text-overflow:ellipsis}table.centered th,table.centered td{text-align:center}th{position:sticky;top:0;background:#e9eef2;color:var(--navy);z-index:1}tbody tr:hover{background:#f7fafc}.empty{padding:28px;color:var(--muted);text-align:center}.note{margin-top:14px;background:#fff9e8;border:1px solid #f1dfaa;border-radius:10px;padding:12px 14px;color:#5b4b1c;font-size:13px}.footer{margin-top:12px;color:var(--muted);font-size:12px}
     @media(max-width:650px){header{padding:18px 16px}.toolbar{align-items:stretch}.field{min-width:100%}.status{margin-left:0;width:100%}.panel-head{align-items:flex-start}}
   </style>
 </head>
@@ -86,7 +86,7 @@ const COLUMNAS_EXCLUIR = {
   recibo: new Set([
     "HoraRto", "HoraSalida", "Observaciones", "FechaRtoOrigen", "CodigoGIS",
     "Distancia", "PilaOrigen", "Cosecha", "Sacada", "Carga", "Fardos",
-    "BrutoOrigenTon", "Densidad", "QUINCENA", "Column36", "Column37",
+    "BrutoOrigenTon", "Densidad", "QUINCENA", "CodProd", "Column36", "Column37",
     "Column38", "Column39", "Column40", "Column41", "Column42"
   ]),
   produccion: new Set([
@@ -428,6 +428,10 @@ function formatearCelda(valor, columna) {
   if (valor instanceof Date) return obtenerFechaFormateada(valor) ?? "";
   const fecha = obtenerFechaFormateada(valor, columna);
   if (fecha) return fecha;
+  if (normalizarNombreCampo(columna) === "rtoorigen") {
+    const numero = obtenerNumeroFormateable(valor);
+    return numero == null ? String(valor) : new Intl.NumberFormat("es-UY", {useGrouping:false,maximumFractionDigits:0}).format(numero);
+  }
   if (esCampoIdentificador(columna)) return String(valor);
   const numero = obtenerNumeroFormateable(valor);
   if (numero != null) return FORMATO_NUMERO.format(numero);
@@ -440,6 +444,7 @@ function renderTable(rows, sourceKey) {
     .filter(col => !excluidas.has(normalizarColumna(col)));
   const wrap = document.createElement("div"); wrap.className="table-wrap";
   const table = document.createElement("table"), thead = document.createElement("thead"), trh = document.createElement("tr");
+  if (sourceKey === "produccion") table.classList.add("centered");
   cols.forEach(c => { const th=document.createElement("th"); th.textContent=c; th.title=c; trh.append(th); }); thead.append(trh); table.append(thead);
   const tbody=document.createElement("tbody");
   rows.forEach(row => { const tr=document.createElement("tr"); cols.forEach(c => { const td=document.createElement("td"); const v=row?.[c]; td.textContent=formatearCelda(v,c); td.title=td.textContent; tr.append(td); }); tbody.append(tr); });
