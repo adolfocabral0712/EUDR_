@@ -720,12 +720,23 @@ function renderShipmentSummary(rows, targetMcs, totalBdmt, fechaLimite) {
     departmentMap.get(farm).push({region:row._region ?? "",percentage:parseNumeroLocal(row.Porcentaje) ?? 0});
   }
   const origenInfo = new Map();
+
   for (const row of origenRows) {
-    const nombreFas = valorPorAlias(row,["nombre_fas"]);
-    const codigoProveedor = valorPorAlias(row,["Codigo Proveedor","codigo_proveedor"]);
-    if (nombreFas != null && String(nombreFas).trim()) {
-      origenInfo.set(normalizarClavePredio(nombreFas),codigoProveedor ?? "");
+    const nombreFas = valorPorAlias(row, ["nombre_fas", "NOMBREFAS"]);
+    const codigoProveedor = String(
+      valorPorAlias(row, ["Codigo Proveedor", "codigo_proveedor"]) ?? ""
+    ).trim();
+  
+    // Ignora filas vacías para evitar que borren un código ya encontrado.
+    if (!nombreFas || !codigoProveedor) continue;
+  
+    const clave = normalizarClavePredio(nombreFas);
+  
+    if (!origenInfo.has(clave)) {
+      origenInfo.set(clave, new Set());
     }
+  
+    origenInfo.get(clave).add(codigoProveedor);
   }
 
   const filasCuadro = [];
@@ -733,7 +744,9 @@ function renderShipmentSummary(rows, targetMcs, totalBdmt, fechaLimite) {
     const shareOrigenEspecie = totalSeleccionado ? grupo.mcs / totalSeleccionado : 0;
     const deptos = departmentMap.get(normalizarClavePredio(grupo.origen));
     const reparto = deptos?.length ? deptos : [{region:"",percentage:100}];
-    const manejo = origenInfo.get(normalizarClavePredio(grupo.origen)) ?? "";
+    const manejo = [
+    ...(origenInfo.get(normalizarClavePredio(grupo.origen)) ?? [])
+    ].join(" / ");
     for (const depto of reparto) {
       const pesoDepto = depto.percentage / 100;
       const porcentajeTotal = shareOrigenEspecie * pesoDepto * 100;
