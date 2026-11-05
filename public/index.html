@@ -98,7 +98,7 @@ const FUENTES = {
     detalle: "origenes.json · ordenar por código descendente"
   },
   pilas: {
-    nombre: "PILAS MONTES",
+    nombre: "PILAS MONTE",
     tipo: "json",
     url: "/api/source/pilas",
     detalle: "MedicionesFAS.json · estructura y filtros de la tabla por confirmar"
@@ -719,24 +719,25 @@ function renderShipmentSummary(rows, targetMcs, totalBdmt, fechaLimite) {
     if (!departmentMap.has(farm)) departmentMap.set(farm,[]);
     departmentMap.get(farm).push({region:row._region ?? "",percentage:parseNumeroLocal(row.Porcentaje) ?? 0});
   }
-  const origenInfo = new Map();
+  function buscarManejoForestal(origen, filasOrigenes) {
+    const claveBuscada = normalizarClavePredio(origen);
 
-  for (const row of origenRows) {
-    const nombreFas = valorPorAlias(row, ["nombre_fas", "NOMBREFAS"]);
-    const codigoProveedor = String(
-      valorPorAlias(row, ["Codigo Proveedor", "codigo_proveedor"]) ?? ""
-    ).trim();
-  
-    // Ignora filas vacías para evitar que borren un código ya encontrado.
-    if (!nombreFas || !codigoProveedor) continue;
-  
-    const clave = normalizarClavePredio(nombreFas);
-  
-    if (!origenInfo.has(clave)) {
-      origenInfo.set(clave, new Set());
+    // Recorre ORIGENES desde la última fila hacia la primera.
+    // Si encuentra coincidencias repetidas, prioriza la última con código informado.
+    for (let i = filasOrigenes.length - 1; i >= 0; i--) {
+      const fila = filasOrigenes[i];
+      const nombreFas = valorPorAlias(fila, ["nombre_fas", "NOMBREFAS"]);
+
+      if (normalizarClavePredio(nombreFas) !== claveBuscada) continue;
+
+      const codigoProveedor = String(
+        valorPorAlias(fila, ["Codigo Proveedor", "codigo_proveedor"]) ?? ""
+      ).trim();
+
+      if (codigoProveedor) return codigoProveedor;
     }
-  
-    origenInfo.get(clave).add(codigoProveedor);
+
+    return "";
   }
 
   const filasCuadro = [];
@@ -744,9 +745,7 @@ function renderShipmentSummary(rows, targetMcs, totalBdmt, fechaLimite) {
     const shareOrigenEspecie = totalSeleccionado ? grupo.mcs / totalSeleccionado : 0;
     const deptos = departmentMap.get(normalizarClavePredio(grupo.origen));
     const reparto = deptos?.length ? deptos : [{region:"",percentage:100}];
-    const manejo = [
-    ...(origenInfo.get(normalizarClavePredio(grupo.origen)) ?? [])
-    ].join(" / ");
+    const manejo = buscarManejoForestal(grupo.origen, origenRows);
     for (const depto of reparto) {
       const pesoDepto = depto.percentage / 100;
       const porcentajeTotal = shareOrigenEspecie * pesoDepto * 100;
